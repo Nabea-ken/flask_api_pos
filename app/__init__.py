@@ -4,9 +4,11 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-from flask import Flask
+from flask import Flask, jsonify
+from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.exc import OperationalError
 
 db = SQLAlchemy()
 jwt = JWTManager()
@@ -47,6 +49,13 @@ def create_app():
     app.config["SQLALCHEMY_DATABASE_URI"] = database_uri
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
+    cors_origins = os.environ.get("CORS_ORIGINS", "*")
+    if cors_origins.strip() == "*":
+        origins = "*"
+    else:
+        origins = [o.strip() for o in cors_origins.split(",") if o.strip()]
+    CORS(app, resources={r"/*": {"origins": origins}})
+
     db.init_app(app)
     jwt.init_app(app)
 
@@ -59,7 +68,29 @@ def create_app():
     app.register_blueprint(products_bp)
     app.register_blueprint(sales_bp)
 
+    @app.get("/")
+    def root():        
+        return jsonify(
+            service="flask-api-pos",
+            ok=True,
+            routes=[
+                "POST /register",
+                "POST /login",
+                "GET/POST /products",
+                "GET/POST /sales",
+            ],
+        )
+
     with app.app_context():
-        db.create_all()
+        try:
+            db.create_all()
+        except OperationalError as e:
+            raise RuntimeError(
+                "Database connection failed while creating tables. Check "
+                "SQLALCHEMY_DATABASE_URI in .env: correct PostgreSQL user and password, "
+                "database exists, server is running. If the password contains @, #, /, "
+                "or other reserved characters, URL-encode them in the URI (e.g. @ → "
+                "%40). "
+            ) from e
 
     return app

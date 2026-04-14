@@ -6,7 +6,7 @@ A small **Flask REST API** for a point-of-sale style workflow: users register an
 
 ## Features
 
-- **Four HTTP routes**: `/register`, `/login`, `/products`, `/sales` (no separate `/payments` route; payments are created when you POST a sale).
+- **Core API routes**: `/register`, `/login`, `/products`, `/sales` (no separate `/payments` route; payments are created when you POST a sale). **`GET /`** returns a small JSON welcome payload (useful for browsers and ngrok checks).
 - **JWT**: Access tokens issued on register and login; protected routes require `Authorization: Bearer <token>`.
 - **Password storage**: Plain passwords are never stored; Werkzeug hashes them before saving.
 - **Multi-tenant data**: Products and sales are scoped to the authenticated user (by user id in the JWT).
@@ -151,6 +151,12 @@ The JWT **subject** is the user id as a string (`str(user.id)`). The API resolve
 Base URL in development: `http://127.0.0.1:5000`
 
 All bodies are **`Content-Type: application/json`** unless noted.
+
+### GET `/`
+
+Public. No auth. Returns JSON confirming the service is up and lists the main route paths. Use this when testing **ngrok** or opening the base URL in a browser.
+
+**Response `200`:** JSON with `service`, `ok`, and `routes`.
 
 ### POST `/register`
 
@@ -323,6 +329,7 @@ Creates a **sale** for one of your products and a **payment** row in the same tr
 
 | Path | Methods |
 |------|---------|
+| `/` | GET only (health / welcome JSON) |
 | `/register` | POST only |
 | `/login` | POST only |
 | `/products` | GET, POST |
@@ -338,6 +345,48 @@ Using an unsupported method (for example **GET** `/login`) returns **405**.
 - **Rotate secrets** if they were ever committed or shared.
 - **`SECRET_KEY`** and **`JWT_SECRET_KEY`** should be long, random, and distinct in production.
 - The app **does not** implement refresh tokens, OAuth, or role-based access control; it is a minimal class-style API.
+
+---
+
+## Exposing the API with ngrok
+
+Use this when you want Postman, a phone, or another machine to reach your laptop over the internet.
+
+1. **Fix the database first** — If `python run.py` crashes on startup (PostgreSQL password, etc.), ngrok will only show errors or **502 Bad Gateway** because nothing is listening.
+
+2. **Start Flask** (from the project folder, venv activated):
+
+   ```powershell
+   python run.py
+   ```
+
+   Default port is **5000** (override with env var `PORT`).
+
+3. **Point ngrok at the same port** (in another terminal):
+
+   ```powershell
+   ngrok http 5000
+   ```
+
+   If you changed `PORT`, use that number instead (e.g. `ngrok http 8080`).
+
+4. **Confirm the tunnel** — In the terminal where ngrok is running, you should see a line like `Forwarding https://xxxx.ngrok-free.dev -> http://localhost:5000`. If that window is closed, the public URL stops working. **Restarting ngrok** often gives a **new** URL; update bookmarks and Postman’s `base_url`.
+
+5. **Port must match Flask** — `ngrok http 5000` only works if Flask is listening on **5000**. If you set `PORT=8000` in the environment, run `ngrok http 8000` instead.
+
+6. **Open the ngrok inspector** — Visit `http://127.0.0.1:4040` on your machine to see whether requests hit ngrok and what error (502 = nothing listening on the forwarded port).
+
+7. **Test the base URL** — **`GET https://xxxx.ngrok-free.dev/`** should return JSON (service name and route list). If that fails but `http://127.0.0.1:5000/` works locally, the problem is ngrok (wrong port, tunnel offline, or old URL).
+
+8. **ngrok free “browser warning”** — For **Postman**, **curl**, or scripts, add this header so requests are not blocked by the interstitial page:
+
+   | Header | Value |
+   |--------|--------|
+   | `ngrok-skip-browser-warning` | `true` |
+
+   In Postman: request or collection **Headers** → add the row above. Browsers may still show a warning page until you click through once.
+
+9. **Update Postman** — Set the collection variable `base_url` to your ngrok URL **without** a trailing slash, e.g. `https://xxxx.ngrok-free.dev`.
 
 ---
 
