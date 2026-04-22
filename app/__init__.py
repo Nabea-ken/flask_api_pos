@@ -61,10 +61,12 @@ def create_app():
 
     from app import models  # noqa: F401
     from app.auth import auth_bp
+    from app.mpesa import mpesa_bp
     from app.products import products_bp
     from app.sales import sales_bp
 
     app.register_blueprint(auth_bp)
+    app.register_blueprint(mpesa_bp)
     app.register_blueprint(products_bp)
     app.register_blueprint(sales_bp)
 
@@ -78,6 +80,9 @@ def create_app():
                 "POST /login",
                 "GET/POST /products",
                 "GET/POST /sales",
+                "POST /mpesa/stk-push (JWT)",
+                "POST /mpesa/stk-query (JWT)",
+                "POST /mpesa/stk-callback (public)",
             ],
         )
 

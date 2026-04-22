@@ -25,6 +25,7 @@ A small **Flask REST API** for a point-of-sale style workflow: users register an
 | [Werkzeug](https://werkzeug.palletsprojects.com/) | Password hashing |
 | [python-dotenv](https://pypi.org/project/python-dotenv/) | Load `.env` into environment variables |
 | [psycopg2-binary](https://pypi.org/project/psycopg2-binary/) | PostgreSQL driver for SQLAlchemy |
+| [requests](https://pypi.org/project/requests/) | HTTP client for Safaricom M-Pesa APIs |
 
 ---
 
@@ -42,6 +43,7 @@ flask-api-pos/
     ├── __init__.py      # create_app(), db, jwt, blueprint registration, db.create_all()
     ├── models.py        # User, Product, Sale, Payment
     ├── auth.py          # /register, /login
+    ├── mpesa.py         # /mpesa/stk-push, /mpesa/stk-query, /mpesa/stk-callback
     ├── products.py      # /products
     └── sales.py         # /sales (creates Sale + Payment on POST)
 ```
@@ -91,6 +93,19 @@ Set these in **`.env`** (all are **required**; the app will not start without th
 | `SECRET_KEY` | Flask session / signing (use a long random string) |
 | `JWT_SECRET_KEY` | Separate secret used to sign JWTs (use another long random string) |
 | `SQLALCHEMY_DATABASE_URI` | SQLAlchemy database URL, e.g. `postgresql://USER:PASSWORD@HOST:5432/DATABASE` |
+
+M-Pesa-specific variables (required when using M-Pesa endpoints):
+
+| Variable | Purpose |
+|----------|---------|
+| `MPESA_CONSUMER_KEY` | Safaricom app consumer key |
+| `MPESA_CONSUMER_SECRET` | Safaricom app consumer secret |
+| `MPESA_SHORTCODE` | PayBill/Till short code |
+| `MPESA_PASS_KEY` | Daraja passkey |
+| `MPESA_CALLBACK_URL` | Public callback URL, e.g. ngrok `/mpesa/stk-callback` |
+| `MPESA_ACCESS_TOKEN_URL` | Optional override (sandbox default is already set) |
+| `MPESA_STK_PUSH_URL` | Optional override (sandbox default is already set) |
+| `MPESA_STK_QUERY_URL` | Optional override (sandbox default is already set) |
 
 Example URI shape:
 
@@ -325,6 +340,66 @@ Creates a **sale** for one of your products and a **payment** row in the same tr
 
 ---
 
+### POST `/mpesa/stk-push`
+
+**Authentication required.**
+
+Initiates an M-Pesa STK push using your configured Daraja credentials.
+
+**Request body:**
+
+```json
+{
+  "phone_number": "2547XXXXXXXX",
+  "amount": 1,
+  "account_reference": "Order-1001",
+  "transaction_desc": "POS payment"
+}
+```
+
+Only `phone_number` and `amount` are required.
+
+**Responses:**
+
+- `200` — Forwards Safaricom STK push response.
+- `400` — Validation error.
+- `500` — Missing M-Pesa env configuration.
+- `502` — Upstream Safaricom request failed.
+
+---
+
+### POST `/mpesa/stk-query`
+
+**Authentication required.**
+
+Queries STK push status by checkout request id.
+
+**Request body:**
+
+```json
+{
+  "checkout_request_id": "ws_CO_XXXXXXXXXXXX"
+}
+```
+
+**Responses:**
+
+- `200` — Forwards Safaricom query response.
+- `400` — Validation error.
+- `500` — Missing M-Pesa env configuration.
+- `502` — Upstream Safaricom request failed.
+
+---
+
+### POST `/mpesa/stk-callback`
+
+**Public endpoint** used by Safaricom to post STK callback payloads.
+
+Current behavior: acknowledges payload with `{"ok": true, ...}`.  
+Recommended next step: persist callback details and reconcile with local `payments`.
+
+---
+
 ## HTTP methods summary
 
 | Path | Methods |
@@ -334,6 +409,9 @@ Creates a **sale** for one of your products and a **payment** row in the same tr
 | `/login` | POST only |
 | `/products` | GET, POST |
 | `/sales` | GET, POST |
+| `/mpesa/stk-push` | POST (JWT) |
+| `/mpesa/stk-query` | POST (JWT) |
+| `/mpesa/stk-callback` | POST (public) |
 
 Using an unsupported method (for example **GET** `/login`) returns **405**.
 
